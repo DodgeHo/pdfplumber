@@ -72,38 +72,86 @@ fi
 echo ""
 
 echo -e "${BLUE}[5/5] 启动精简程序...${NC}"
-echo -e "${GREEN}程序将在后台运行，日志会实时显示${NC}"
-echo -e "${YELLOW}按 Ctrl+C 可以安全停止程序（进度会保存）${NC}"
-echo "================================================"
 echo ""
 
-# 后台运行并实时显示日志
-nohup python3 refiner_v2.py "$@" > /dev/null 2>&1 &
-PID=$!
+# 检查是否传入 --daemon 或 -d 参数
+DAEMON_MODE=false
+for arg in "$@"; do
+    if [ "$arg" == "--daemon" ] || [ "$arg" == "-d" ]; then
+        DAEMON_MODE=true
+        break
+    fi
+done
 
-echo -e "${GREEN}✓ 程序已启动 (PID: $PID)${NC}"
-echo -e "${BLUE}实时日志输出:${NC}"
-echo "================================================"
-echo ""
-
-# 实时显示日志
-tail -f refiner.log &
-TAIL_PID=$!
-
-# 等待主进程结束
-wait $PID
-EXIT_CODE=$?
-
-# 停止 tail
-kill $TAIL_PID 2>/dev/null
-
-echo ""
-echo "================================================"
-if [ $EXIT_CODE -eq 0 ]; then
-    echo -e "${GREEN}✓ 程序执行完成！${NC}"
+if [ "$DAEMON_MODE" == "true" ]; then
+    # 守护进程模式 - 可以关闭 SSH 继续运行
+    echo -e "${GREEN}以守护进程模式启动（SSH 断开后继续运行）${NC}"
+    echo -e "${YELLOW}提示: 使用以下命令查看进度${NC}"
+    echo "  查看日志: tail -f refiner.log"
+    echo "  查看进程: ps aux | grep refiner_v2.py"
+    echo "  停止进程: kill \$(cat .refiner.pid)"
+    echo "================================================"
+    echo ""
+    
+    # 使用 nohup 在后台运行，输出重定向到日志
+    nohup python3 refiner_v2.py "$@" >> refiner.log 2>&1 &
+    PID=$!
+    echo $PID > .refiner.pid
+    
+    echo -e "${GREEN}✓ 程序已启动 (PID: $PID)${NC}"
+    echo -e "${BLUE}进程 ID 已保存到 .refiner.pid${NC}"
+    echo ""
+    echo "最近的日志输出:"
+    echo "------------------------------------------------"
+    sleep 2
+    tail -n 20 refiner.log
+    echo "------------------------------------------------"
+    echo ""
+    echo -e "${GREEN}程序正在后台运行，可以安全关闭 SSH 连接${NC}"
+    
 else
-    echo -e "${RED}✗ 程序异常退出 (退出码: $EXIT_CODE)${NC}"
+    # 前台模式 - 实时显示日志
+    echo -e "${GREEN}以前台模式启动（实时显示日志）${NC}"
+    echo -e "${YELLOW}按 Ctrl+C 可以安全停止程序（进度会保存）${NC}"
+    echo -e "${YELLOW}提示: 如需 SSH 断开后继续运行，请使用 --daemon 参数${NC}"
+    echo "================================================"
+    echo ""
+    
+    # 后台运行并实时显示日志
+    nohup python3 refiner_v2.py "$@" > /dev/null 2>&1 &
+    PID=$!
+    echo $PID > .refiner.pid
+    
+    echo -e "${GREEN}✓ 程序已启动 (PID: $PID)${NC}"
+    echo -e "${BLUE}实时日志输出:${NC}"
+    echo "================================================"
+    echo ""
+    
+    # 实时显示日志
+    tail -f refiner.log &
+    TAIL_PID=$!
+    
+    # 捕获 Ctrl+C 信号
+    trap "echo ''; echo -e '${YELLOW}正在停止...${NC}'; kill $TAIL_PID 2>/dev/null; exit 0" INT
+    
+    # 等待主进程结束
+    wait $PID
+    EXIT_CODE=$?
+    
+    # 停止 tail
+    kill $TAIL_PID 2>/dev/null
+    
+    echo ""
+    echo "================================================"
+    if [ $EXIT_CODE -eq 0 ]; then
+        echo -e "${GREEN}✓ 程序执行完成！${NC}"
+    else
+        echo -e "${RED}✗ 程序异常退出 (退出码: $EXIT_CODE)${NC}"
+    fi
+    echo "================================================"
+    
+    # 清理 PID 文件
+    rm -f .refiner.pid
+    
+    exit $EXIT_CODE
 fi
-echo "================================================"
-
-exit $EXIT_CODE
