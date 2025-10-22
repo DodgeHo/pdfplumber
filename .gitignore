@@ -13,7 +13,7 @@ nonpublic/
 *.env
 refiner.log
 .refiner_progress.json
-textbook.txt
+
 refined_textbook.txt
 pdfplumber_env/
 # 排除 PDF 文件
