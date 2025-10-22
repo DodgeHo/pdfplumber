@@ -74,12 +74,14 @@ echo ""
 echo -e "${BLUE}[5/5] 启动精简程序...${NC}"
 echo ""
 
-# 检查是否传入 --daemon 或 -d 参数
+# 检查是否传入 --daemon 或 -d 参数，并过滤掉这些参数
 DAEMON_MODE=false
+PYTHON_ARGS=()
 for arg in "$@"; do
     if [ "$arg" == "--daemon" ] || [ "$arg" == "-d" ]; then
         DAEMON_MODE=true
-        break
+    else
+        PYTHON_ARGS+=("$arg")
     fi
 done
 
@@ -88,13 +90,13 @@ if [ "$DAEMON_MODE" == "true" ]; then
     echo -e "${GREEN}以守护进程模式启动（SSH 断开后继续运行）${NC}"
     echo -e "${YELLOW}提示: 使用以下命令查看进度${NC}"
     echo "  查看日志: tail -f refiner.log"
-    echo "  查看进程: ps aux | grep refiner_v2.py"
-    echo "  停止进程: kill \$(cat .refiner.pid)"
+    echo "  查看状态: ./check_refiner.sh"
+    echo "  停止进程: ./stop_refiner.sh"
     echo "================================================"
     echo ""
     
     # 使用 nohup 在后台运行，输出重定向到日志
-    nohup python3 refiner_v2.py "$@" >> refiner.log 2>&1 &
+    nohup python3 refiner_v2.py "${PYTHON_ARGS[@]}" >> refiner.log 2>&1 &
     PID=$!
     echo $PID > .refiner.pid
     
@@ -104,7 +106,7 @@ if [ "$DAEMON_MODE" == "true" ]; then
     echo "最近的日志输出:"
     echo "------------------------------------------------"
     sleep 2
-    tail -n 20 refiner.log
+    tail -n 20 refiner.log 2>/dev/null || echo "等待日志生成..."
     echo "------------------------------------------------"
     echo ""
     echo -e "${GREEN}程序正在后台运行，可以安全关闭 SSH 连接${NC}"
@@ -118,7 +120,7 @@ else
     echo ""
     
     # 后台运行并实时显示日志
-    nohup python3 refiner_v2.py "$@" > /dev/null 2>&1 &
+    nohup python3 refiner_v2.py "${PYTHON_ARGS[@]}" > /dev/null 2>&1 &
     PID=$!
     echo $PID > .refiner.pid
     
